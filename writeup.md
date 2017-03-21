@@ -57,31 +57,30 @@ I reached over 99% accuracy.
 
 ####1. Describe how (and identify where in your code) you implemented a sliding window search.  How did you decide what scales to search and how much to overlap windows?
 
-The code for this step is contained in the IPython notebook section named "Sliding window search"
+The basics were researched in IPython section "Sliding window search".  A more efficient implementation that will be discussed here can be found in the IPython section "Using scale for efficiency".
 
-First step is generate a list of windows to use for scanning for cars.  Here are (64, 64) windows with (0.5, 0.5) overlap:
+In principle a sliding window search involves scanning a target region of the image, one patch at a time, looking for correct identification of a car.  Each image patch is tranformed to a feature set and evaulated with our trained classifier.  Performing a search naively works great but is inefficient because HOG feature extraction is an expensive operation and if our patches overlap, we essentially transform the pixels to HOG features more than once.
 
-![alt text][image1]
+The steps are as follows:
+1. scale image by a set factor (repeat for several scales).  The objective here is perform search on patches of different sizes.  Because we will do HOG subsampling, thsi ensures the result is easily broken into correctly sized blocks of HOG features.
+2. Extract HOG features for the whole image (once!)
+3. extract from result of step 2 the HOG features of a patch we are interested in
+4. extract matching pixel patch and extract spatial and color histogram features for the patch
+5. Combine HOG, spatial, and color histogram features and predict with trained SVM classifier. If car is detected, save patch coordinates for a successful detection.
+6. Repeat steps 3-5 for all patches
+7. Repeat steps 1-6 for different scales
+8. Once all detected cars patches are saved, produce a heatmap
+9. Apply threshold to the heatmap so weak signal detections are dropped.  Weak signal are expected for false positive where a car is 'detected' by few patches, most probably noise.
+10. Use labels function to find boxes that encompases each 'blob' of heatmap pixels
+11. Mark the label boxes on the original image a detection.
 
-i then used classifier to predict if a car is present in each window. An example result:
-
-![alt text][image2]
-
-To avoid false positives, I used heatmap to count number of windows each pixel participated in.  I expect a correctly detected car to appear in multiple windows.
-
-![alt text][image3]
-
-I thresholded the heatmap so pixels with few window detections are removed.
-
-![alt text][image4]
-
-I then used `label` to compute bounding boxes of the remaining strong signals from the threshold heatmap.
-
-![alt text][image5]
+I used the test images to experiment with different scale and threshold values.  The results can be seen in the next section.
 
 ####2. Show some examples of test images to demonstrate how your pipeline is working.  What did you do to optimize the performance of your classifier?
 
-The pipeline described above worked well but wasn not very efficient.  This is because windows were overlapped and I was performing expensive HOG transformation more than once on same pixels.  I refactored the pipeline to extract HOG features once for each whole image.  I then cut a section of the output HOG map for each window. To have consistent number of features for the classifier I switched from window size in pixels to scale factor and kept window size constant. I experimented with various scales, heatmap thresholds and several test images:
+Compared to naive sliding window approach where each patch undergoes independant feature extraction, HOG subsampling described above is much faster.  This is due to the fact that the HOG features are extracted once for the whole image and then reused for each patch under question, thus allowing overlap without additional HOG feature extractions.
+
+The image below shows prominent steps of the flow on test images.  This vualization fo multiple test images halped me to tweak values like which scales to use, threshold value, and classifier confidence
 
 ![alt text][image6]
 
@@ -95,7 +94,7 @@ Here's a [link to my video result](./project_video_output.mp4)
 
 ####2. Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
 
-Please see "Sliding Window Search" section above for discussion of heatmaps and thresholds.
+Beyond the steps dicussed above, when it came to video feed, I added running average of detected cars.  Usign heatmap, I accumulated count of detections per pixel.  If a certain threshold is passed, I extract labels and mark the rectangle on the image as a detection. This smoothed out jerkiness and removed some false positive detections.
 
 ---
 
@@ -106,11 +105,11 @@ Please see "Sliding Window Search" section above for discussion of heatmaps and 
 My implementation is not very robust but successfully demonstrates the basic techniques for car detection.  It will likely fail in these cases:
 
 1. very small cars are not found.  These requires scanning very small windows which dramatically increases number of windows and procesing times. I could adapt search area to the window size so small window size is limited to middle of the image where cars are closer to the horizon.
-2. False positive detections can crop in by passing heatmap threshold.  A solution may include tracking cars over time and discard positive detections that appear for very short duration.
-2. As can be see on the project video, when 2 cars are one behind the other, this algoritm does not distinguish between them well.  Tracking objects over time can aid the algorithm understand that.
+2. False positive detections can crop in by passing heatmap threshold.  Further work is required to filter out these completely.
+3. As can be see on the project video, when 2 cars are one behind the other, this algoritm does not distinguish between them well.
 
 Challenges I faced include:
 
 1. Image format conversions! Some images are jpg while others are png which mean different scales of pixel values.  This is hidden to the human eye but play havock on the classifier.
-2. Working with sliding windows of different sizes was mot intuitive and easy to understand.   Switching to single HOG feature extraction for the whole image was hard to grasp and debug.  The description of the class slide was not very easy for me to understand.
+2. Working with sliding windows of different sizes was very intuitive and easy to understand.   Switching to single HOG feature extraction for the whole image was hard to grasp and debug.  The description of the class slide was not very easy for me to understand.
 
